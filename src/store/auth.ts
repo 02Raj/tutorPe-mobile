@@ -3,6 +3,9 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithCredential,
+  GoogleAuthProvider,
+  fetchSignInMethodsForEmail,
   updateProfile,
   signOut as firebaseSignOut,
   type User,
@@ -24,6 +27,7 @@ type AuthState = {
   busy: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   start: () => () => void;
 };
@@ -40,6 +44,11 @@ export function authErrorMessage(error: unknown): string {
       return "This email is already registered. Log in instead.";
     case "auth/weak-password":
       return "Use at least 6 characters.";
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+      return "Google sign-in was cancelled.";
+    case "auth/account-exists-with-different-credential":
+      return "This email is already registered with a password. Log in with email first.";
     default:
       return error instanceof Error ? error.message : "Something went wrong.";
   }
@@ -77,6 +86,30 @@ export const useAuth = create<AuthState>((set) => ({
       const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
       await updateProfile(result.user, { displayName: name.trim() });
       await getOrCreateInstitute(result.user);
+    } finally {
+      set({ busy: false });
+    }
+  },
+
+  signInWithGoogle: async (idToken) => {
+    set({ busy: true });
+    try {
+      const credential = GoogleAuthProvider.credential(idToken);
+      await signInWithCredential(auth, credential);
+    } catch (error) {
+      const authError = error as AuthError;
+      if (authError.code === "auth/account-exists-with-different-credential") {
+        const email = authError.customData?.email as string | undefined;
+        if (email) {
+          const methods = await fetchSignInMethodsForEmail(auth, email);
+          if (methods.includes("password")) {
+            throw new Error(
+              `This email "${email}" was registered with a password. Log in with email and password.`
+            );
+          }
+        }
+      }
+      throw error;
     } finally {
       set({ busy: false });
     }

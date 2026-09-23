@@ -12,9 +12,14 @@ import { Redirect } from "expo-router";
 import { colors } from "../src/theme";
 import { PrimaryButton } from "../src/components/ui";
 import { authErrorMessage, useAuth } from "../src/store/auth";
+import {
+  getGoogleIdToken,
+  googleNativeErrorMessage,
+  isExpoGo,
+} from "../src/lib/google-sign-in";
 
 export default function LoginScreen() {
-  const { user, ready, busy, signIn, signUp } = useAuth();
+  const { user, ready, busy, signIn, signUp, signInWithGoogle } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -37,6 +42,17 @@ export default function LoginScreen() {
     }
   };
 
+  const google = async () => {
+    setError("");
+    try {
+      const idToken = await getGoogleIdToken();
+      if (!idToken) return;
+      await signInWithGoogle(idToken);
+    } catch (err) {
+      setError(googleNativeErrorMessage(err));
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.wrap}
@@ -47,7 +63,25 @@ export default function LoginScreen() {
           Tutor<Text style={{ color: colors.accent }}>Pe</Text>
         </Text>
         <Text style={styles.title}>{mode === "login" ? "Welcome back" : "Create account"}</Text>
-        <Text style={styles.sub}>Same account as the website. Data stays in sync.</Text>
+        <Text style={styles.sub}>Same Google or email account as the website.</Text>
+
+        <PrimaryButton
+          title="Continue with Google"
+          tone="ghost"
+          loading={busy}
+          onPress={() => void google()}
+        />
+        {isExpoGo() ? (
+          <Text style={styles.hint}>
+            Expo Go cannot complete Google login (Google blocked that OAuth). Email login works here. For Google, run a native build: npx expo run:android
+          </Text>
+        ) : null}
+
+        <View style={styles.divider}>
+          <View style={styles.line} />
+          <Text style={styles.or}>OR SIGN IN WITH EMAIL</Text>
+          <View style={styles.line} />
+        </View>
 
         {mode === "signup" && (
           <TextInput
@@ -98,6 +132,10 @@ const styles = StyleSheet.create({
   mark: { fontSize: 28, fontWeight: "800", color: colors.text },
   title: { fontSize: 24, fontWeight: "700", color: colors.text, marginTop: 12 },
   sub: { color: colors.textMuted, marginBottom: 12 },
+  hint: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
+  divider: { flexDirection: "row", alignItems: "center", gap: 8, marginVertical: 4 },
+  line: { flex: 1, height: 1, backgroundColor: colors.border },
+  or: { color: colors.textDim, fontSize: 11, fontWeight: "700" },
   input: {
     borderWidth: 1,
     borderColor: colors.borderStrong,
